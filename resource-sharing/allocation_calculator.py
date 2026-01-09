@@ -136,11 +136,11 @@ def calculate_fairness_multiplier(claude_name: str, recent_usage: Dict[str, floa
 
     # fairness = mine / lowest
     # If I'm the lowest: 1.0 (no change)
-    # If I'm higher: > 1.0 (slow down)
+    # If I'm higher: > 1.0 (slow down proportionally)
+    # No clamping - let the MAX_INTERVAL bound handle extreme cases
     multiplier = my_usage / lowest_usage
 
-    # Clamp to reasonable bounds (don't swing too wildly)
-    return max(0.5, min(2.0, multiplier))
+    return multiplier
 
 def calculate_window_multiplier(
     percent_used: int,
