@@ -76,6 +76,7 @@ def get_claude_info(claude_name: str) -> Optional[Dict]:
 def get_recent_weighted_usage(hours: int = 24) -> Dict[str, float]:
     """
     Get weighted_cost usage for all Claudes in the last N hours.
+    Uses existing resource_share_increments table (autonomy mode only).
     Returns dict of {claude_name: total_weighted_cost}
     """
     conn = sqlite3.connect(DB_PATH)
@@ -85,8 +86,8 @@ def get_recent_weighted_usage(hours: int = 24) -> Dict[str, float]:
 
     cursor.execute("""
         SELECT claude_name, SUM(weighted_cost) as total_weighted
-        FROM autonomous_time_sessions
-        WHERE start_time >= ?
+        FROM resource_share_increments
+        WHERE timestamp >= ? AND mode = 'autonomy'
         GROUP BY claude_name
     """, (cutoff.isoformat(),))
 
@@ -109,7 +110,7 @@ def calculate_fairness_multiplier(claude_name: str, recent_usage: Dict[str, floa
     """
     Calculate fairness multiplier based on recent weighted usage.
 
-    Formula: lowest_usage / my_usage
+    Formula: my_usage / lowest_usage
     - If I've used less than others: multiplier < 1.0 (speed up)
     - If I've used more than others: multiplier > 1.0 (slow down)
 
@@ -133,10 +134,10 @@ def calculate_fairness_multiplier(claude_name: str, recent_usage: Dict[str, floa
     if my_usage == 0:
         return 0.5  # Speed up significantly
 
-    # fairness = lowest / mine
+    # fairness = mine / lowest
     # If I'm the lowest: 1.0 (no change)
     # If I'm higher: > 1.0 (slow down)
-    multiplier = lowest_usage / my_usage
+    multiplier = my_usage / lowest_usage
 
     # Clamp to reasonable bounds (don't swing too wildly)
     return max(0.5, min(2.0, multiplier))
