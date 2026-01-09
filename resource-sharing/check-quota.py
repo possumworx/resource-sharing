@@ -33,12 +33,61 @@ def setup_database():
     conn.commit()
     conn.close()
 
+def parse_reset_time(reset_line: str):
+    """Parse reset time string into datetime.
+    Handles formats like:
+    - Resets 10:59pm (Europe/London)
+    - Resets Jan 8, 7:59am (Europe/London)
+    """
+    # Extract the time part, ignoring timezone label
+    match = re.search(r'Resets\s+(.+?)\s*\([^)]+\)', reset_line)
+    if not match:
+        return None
+
+    time_str = match.group(1).strip()
+    now = datetime.now()
+
+    # Handle "10:59pm" format (today)
+    time_only = re.match(r'^(\d{1,2}):(\d{2})(am|pm)$', time_str, re.IGNORECASE)
+    if time_only:
+        hour, minute, ampm = time_only.groups()
+        hour = int(hour)
+        minute = int(minute)
+        if ampm.lower() == 'pm' and hour != 12:
+            hour += 12
+        elif ampm.lower() == 'am' and hour == 12:
+            hour = 0
+        return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    # Handle "Jan 8, 7:59am" format
+    date_time = re.match(r'^(\w+)\s+(\d{1,2}),?\s+(\d{1,2}):(\d{2})(am|pm)$', time_str, re.IGNORECASE)
+    if date_time:
+        month_str, day, hour, minute, ampm = date_time.groups()
+        month_map = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+                     'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12}
+        month = month_map.get(month_str.lower()[:3], 1)
+        day = int(day)
+        hour = int(hour)
+        minute = int(minute)
+        if ampm.lower() == 'pm' and hour != 12:
+            hour += 12
+        elif ampm.lower() == 'am' and hour == 12:
+            hour = 0
+        year = now.year
+        # Handle year rollover
+        if month < now.month:
+            year += 1
+        return datetime(year, month, day, hour, minute)
+
+    return None
+
 def parse_usage_text(text: str) -> dict:
     """Parse Claude CLI usage output into structured data."""
     lines = [line.strip() for line in text.strip().split('\n') if line.strip()]
 
     results = {}
     i = 0
+    current_window = None  # Track which window we're parsing
 
     while i < len(lines):
         line = lines[i]
@@ -48,28 +97,39 @@ def parse_usage_text(text: str) -> dict:
             i += 1
             continue
 
-        # Check if this looks like a label (no progress bar chars, no "used", no "Resets")
-        if '█' not in line and '% used' not in line and not line.startswith('Resets'):
+        # Check if this looks like a label (no progress bar chars, no "used")
+        if '█' not in line and '% used' not in line:
             label = line.strip()
 
-            # Look ahead for percent
+            # Identify which window this is
+            if 'current session' in label.lower():
+                current_window = 'session_5hour'
+            elif 'current week' in label.lower() and 'all models' in label.lower():
+                current_window = 'week_all'
+            elif 'current week' in label.lower() and 'sonnet' in label.lower():
+                current_window = 'week_sonnet'
+
+            # Look ahead for percent and reset time
             for j in range(i + 1, min(i + 4, len(lines))):
                 next_line = lines[j]
 
                 # Extract percentage
-                if '% used' in next_line:
+                if '% used' in next_line and current_window:
                     match = re.search(r'(\d+)%\s*used', next_line)
                     if match:
                         percent = int(match.group(1))
+                        results[current_window] = percent
 
-                        # Map labels to our column names
-                        if 'current session' in label.lower():
-                            results['session_5hour'] = percent
-                        elif 'current week' in label.lower() and 'all models' in label.lower():
-                            results['week_all'] = percent
-                        elif 'current week' in label.lower() and 'sonnet' in label.lower():
-                            results['week_sonnet'] = percent
-                        break
+                # Extract reset time
+                if next_line.startswith('Resets') and current_window:
+                    reset_time = parse_reset_time(next_line)
+                    if reset_time:
+                        # Store reset times by window type
+                        if current_window == 'session_5hour':
+                            results['session_5hour_reset'] = reset_time.isoformat()
+                        elif current_window in ('week_all', 'week_sonnet'):
+                            # Both weekly windows reset at the same time
+                            results['week_reset'] = reset_time.isoformat()
 
         i += 1
 
@@ -84,16 +144,16 @@ def get_usage_via_tmux():
     time.sleep(2)
 
     # Start Claude
-    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "claude", "Enter"], check=True)
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "claude"], check=True)
+    time.sleep(2)
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Enter"], check=True)
     time.sleep(10)
 
     # Request usage (opens menu)
-    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/usage", "Enter"], check=True)
-    time.sleep(2)  # Wait for menu to appear
-
-    # Select default option in menu
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/usage"], check=True)
+    time.sleep(2)
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Enter"], check=True)
-    time.sleep(5)  # Wait for stats to render
+    time.sleep(10)  # Wait for stats to fully render
 
     # Capture output
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -109,8 +169,10 @@ def get_usage_via_tmux():
 
     # Clean up
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Escape"], check=True)
+    time.sleep(5)
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/exit"], check=True)
     time.sleep(2)
-    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/exit", "Enter"], check=True)
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Enter"], check=True)
     time.sleep(2)
     subprocess.run(["tmux", "kill-session", "-t", "autonomous-claude"], check=False)
 
@@ -125,13 +187,15 @@ def store_quota(data: dict):
 
     cursor.execute("""
         INSERT OR REPLACE INTO quota_info
-        (timestamp, session_5hour, week_all, week_sonnet)
-        VALUES (?, ?, ?, ?)
+        (timestamp, session_5hour, week_all, week_sonnet, session_5hour_reset, week_reset)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, (
         timestamp,
         data.get('session_5hour'),
         data.get('week_all'),
-        data.get('week_sonnet')
+        data.get('week_sonnet'),
+        data.get('session_5hour_reset'),
+        data.get('week_reset')
     ))
 
     conn.commit()
