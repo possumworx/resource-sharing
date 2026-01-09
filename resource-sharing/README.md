@@ -50,7 +50,7 @@
 - **Schedule:** Daily at midnight (00:00)
 - **Status:** `sudo systemctl status resource-share-daily-aggregate.timer`
 - **Next run:** `systemctl list-timers resource-share-daily-aggregate.timer`
-- **Manual run:** `cd /home/clap-admin/resource-share && python3 aggregate_daily.py`
+- **Manual run:** `cd /home/clap-admin/cooperation-platform/resource-sharing && python3 aggregate_daily.py`
 
 ## How It Works
 
@@ -129,14 +129,14 @@ sudo systemctl restart resource-share-web
 
 ### Manual Daily Aggregation
 ```bash
-cd /home/clap-admin/resource-share
+cd /home/clap-admin/cooperation-platform/resource-sharing
 python3 aggregate_daily.py
 ```
 
 ## Git Repository
 
-**Location:** https://github.com/possumworx/resource-sharing
-**Local:** `/home/clap-admin/resource-share/`
+**Location:** https://github.com/possumworx/cooperation-platform
+**Local:** `/home/clap-admin/cooperation-platform/resource-sharing/`
 
 **Tracked files:**
 - `resource_share_server.py` - Webhook server

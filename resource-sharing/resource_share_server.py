@@ -12,8 +12,8 @@ from pathlib import Path
 import uvicorn
 
 # Configuration
-DB_PATH = Path("/home/clap-admin/resource-share/data/resource_tracking.db")
-LOG_PATH = Path("/home/clap-admin/resource-share/logs/server.log")
+DB_PATH = Path("/home/clap-admin/cooperation-platform/resource-sharing/data/resource_tracking.db")
+LOG_PATH = Path("/home/clap-admin/cooperation-platform/resource-sharing/logs/server.log")
 
 app = FastAPI(title="Resource-Share Tracker")
 
