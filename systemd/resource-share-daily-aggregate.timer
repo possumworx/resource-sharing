@@ -1,0 +1,12 @@
+[Unit]
+Description=Run resource-share daily aggregation at midnight
+Requires=resource-share-daily-aggregate.service
+
+[Timer]
+OnCalendar=daily
+OnCalendar=00:00:00
+Persistent=true
+Unit=resource-share-daily-aggregate.service
+
+[Install]
+WantedBy=timers.target

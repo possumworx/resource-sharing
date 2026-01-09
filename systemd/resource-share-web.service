@@ -1,0 +1,17 @@
+[Unit]
+Description=Resource-Share SQLite Web Viewer
+After=network.target
+
+[Service]
+Type=simple
+User=clap-admin
+Group=clap-users
+WorkingDirectory=/home/clap-admin/cooperation-platform/resource-sharing
+ExecStart=/home/clap-admin/.local/bin/sqlite_web /home/clap-admin/cooperation-platform/resource-sharing/data/resource_tracking.db --host 0.0.0.0 --port 8082
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

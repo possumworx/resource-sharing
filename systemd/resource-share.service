@@ -1,0 +1,15 @@
+[Unit]
+Description=Resource-Share Webhook Server
+After=network.target
+
+[Service]
+Type=simple
+User=clap-admin
+Group=clap-users
+WorkingDirectory=/home/clap-admin/cooperation-platform/resource-sharing
+ExecStart=/home/clap-admin/cooperation-platform/resource-sharing/venv/bin/python resource_share_server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

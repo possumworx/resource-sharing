@@ -1,11 +1,13 @@
 [Unit]
-Description=Check Claude API quota usage
+Description=Resource-Share Daily Aggregation
 After=network.target
 
 [Service]
 Type=oneshot
+User=clap-admin
+Group=clap-users
 WorkingDirectory=/home/clap-admin/cooperation-platform/resource-sharing
-ExecStart=/usr/bin/python3 check-quota.py
+ExecStart=/usr/bin/python3 aggregate_daily.py
 StandardOutput=journal
 StandardError=journal
 
