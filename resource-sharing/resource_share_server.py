@@ -47,13 +47,23 @@ async def record_resource_increment(data: ResourceIncrement):
     try:
         conn = get_db()
         cursor = conn.cursor()
-        
+
+        # Get cost multiplier for this Claude
+        cursor.execute("""
+            SELECT cost_multiplier FROM claude_identities WHERE name = ?
+        """, (data.claude_name,))
+        result = cursor.fetchone()
+        cost_multiplier = result[0] if result else 3  # Default to 3 if not found
+
+        # Calculate weighted cost
+        weighted_cost = data.cache_read_increment * cost_multiplier
+
         # Insert into increments table
         cursor.execute("""
-            INSERT INTO resource_share_increments 
-            (claude_name, mode, cache_read_increment, context_percentage)
-            VALUES (?, ?, ?, ?)
-        """, (data.claude_name, data.mode, data.cache_read_increment, data.context_percentage))
+            INSERT INTO resource_share_increments
+            (claude_name, mode, cache_read_increment, context_percentage, weighted_cost)
+            VALUES (?, ?, ?, ?, ?)
+        """, (data.claude_name, data.mode, data.cache_read_increment, data.context_percentage, weighted_cost))
         
         # Update daily totals
         today = date.today().isoformat()

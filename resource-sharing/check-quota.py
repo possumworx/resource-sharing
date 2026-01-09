@@ -87,9 +87,13 @@ def get_usage_via_tmux():
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "claude", "Enter"], check=True)
     time.sleep(10)
 
-    # Request usage
+    # Request usage (opens menu)
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/usage", "Enter"], check=True)
-    time.sleep(10)
+    time.sleep(2)  # Wait for menu to appear
+
+    # Select default option in menu
+    subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Enter"], check=True)
+    time.sleep(5)  # Wait for stats to render
 
     # Capture output
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
