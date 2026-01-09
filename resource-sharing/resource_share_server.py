@@ -10,6 +10,7 @@ from datetime import datetime, date
 import sqlite3
 from pathlib import Path
 import uvicorn
+from allocation_calculator import calculate_recommended_interval
 
 # Configuration
 DB_PATH = Path("/home/clap-admin/cooperation-platform/resource-sharing/data/resource_tracking.db")
@@ -23,6 +24,7 @@ class ResourceIncrement(BaseModel):
     mode: str  # "autonomy" or "collaboration"
     cache_read_increment: int
     context_percentage: float = None
+    current_interval: int = None  # Current timer interval in seconds
 
 class ResourceQuery(BaseModel):
     claude_name: str
