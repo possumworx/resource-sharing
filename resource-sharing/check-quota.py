@@ -87,7 +87,6 @@ def parse_usage_text(text: str) -> dict:
 
     results = {}
     i = 0
-    current_window = None  # Track which window we're parsing
 
     while i < len(lines):
         line = lines[i]
@@ -97,39 +96,43 @@ def parse_usage_text(text: str) -> dict:
             i += 1
             continue
 
-        # Check if this looks like a label (no progress bar chars, no "used")
-        if '█' not in line and '% used' not in line:
+        # Check if this looks like a window label
+        # Must not have progress bar chars or "used" keyword, and must not start with "Resets"
+        if '█' not in line and '% used' not in line and not line.startswith('Resets'):
             label = line.strip()
+            window_type = None
 
             # Identify which window this is
             if 'current session' in label.lower():
-                current_window = 'session_5hour'
+                window_type = 'session_5hour'
             elif 'current week' in label.lower() and 'all models' in label.lower():
-                current_window = 'week_all'
+                window_type = 'week_all'
             elif 'current week' in label.lower() and 'sonnet' in label.lower():
-                current_window = 'week_sonnet'
+                window_type = 'week_sonnet'
 
-            # Look ahead for percent and reset time
-            for j in range(i + 1, min(i + 4, len(lines))):
-                next_line = lines[j]
+            # Only process if we identified a valid window
+            if window_type:
+                # Look ahead for percent and reset time (next 2-3 lines only)
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    next_line = lines[j]
 
-                # Extract percentage
-                if '% used' in next_line and current_window:
-                    match = re.search(r'(\d+)%\s*used', next_line)
-                    if match:
-                        percent = int(match.group(1))
-                        results[current_window] = percent
+                    # Extract percentage
+                    if '% used' in next_line:
+                        match = re.search(r'(\d+)%\s*used', next_line)
+                        if match:
+                            percent = int(match.group(1))
+                            results[window_type] = percent
 
-                # Extract reset time
-                if next_line.startswith('Resets') and current_window:
-                    reset_time = parse_reset_time(next_line)
-                    if reset_time:
-                        # Store reset times by window type
-                        if current_window == 'session_5hour':
-                            results['session_5hour_reset'] = reset_time.isoformat()
-                        elif current_window in ('week_all', 'week_sonnet'):
-                            # Both weekly windows reset at the same time
-                            results['week_reset'] = reset_time.isoformat()
+                    # Extract reset time
+                    if next_line.startswith('Resets'):
+                        reset_time = parse_reset_time(next_line)
+                        if reset_time:
+                            # Store reset times by window type
+                            if window_type == 'session_5hour':
+                                results['session_5hour_reset'] = reset_time.isoformat()
+                            elif window_type in ('week_all', 'week_sonnet'):
+                                # Both weekly windows reset at the same time
+                                results['week_reset'] = reset_time.isoformat()
 
         i += 1
 
