@@ -145,17 +145,14 @@ def calculate_fairness_multiplier(claude_name: str, recent_usage: Dict[str, floa
 def calculate_window_multiplier(
     percent_used: int,
     reset_time_iso: Optional[str],
-    collaborative_pref: int,
     window_name: str = "window"
 ) -> tuple[float, str]:
     """
     Calculate multiplier for a quota window (5hr or weekly).
 
-    Formula:
-    - Calculate % of time elapsed until reset
-    - Reserve collaborative_pref % for collaborative work
-    - Compare autonomous usage rate vs time rate
-    - Return multiplier to speed up or slow down
+    Simple formula: Compare quota % used vs time % elapsed.
+    - If using quota faster than time passing: slow down
+    - If using quota slower than time passing: speed up
 
     Returns: (multiplier, reason_string)
     """
@@ -187,17 +184,12 @@ def calculate_window_multiplier(
     elapsed = (now - window_start).total_seconds()
     time_fraction = min(1.0, max(0.0, elapsed / total_duration))
 
-    # Reserve collaborative margin - that % is for collaborative work
-    autonomous_quota = 100 - collaborative_pref
-
-    # What % of our autonomous quota have we used?
-    autonomous_used_fraction = percent_used / autonomous_quota if autonomous_quota > 0 else 0
-
-    # Are we using it faster or slower than time passing?
+    # Are we using quota faster or slower than time passing?
     if time_fraction == 0:
         return (1.0, f"{window_name}: Just started")
 
-    pace_ratio = autonomous_used_fraction / time_fraction
+    usage_fraction = percent_used / 100.0
+    pace_ratio = usage_fraction / time_fraction
 
     # pace_ratio > 1.0: using too fast, slow down (multiplier > 1.0)
     # pace_ratio < 1.0: using too slow, speed up (multiplier < 1.0)
@@ -267,7 +259,6 @@ def calculate_recommended_interval(
     session_mult, session_reason = calculate_window_multiplier(
         percent_used=quota['session_5hour'],
         reset_time_iso=quota['session_5hour_reset'],
-        collaborative_pref=collaborative_pref,
         window_name="5hr session"
     )
 
@@ -275,7 +266,6 @@ def calculate_recommended_interval(
     week_mult, week_reason = calculate_window_multiplier(
         percent_used=quota['week_all'],
         reset_time_iso=quota['week_reset'],
-        collaborative_pref=collaborative_pref,
         window_name="weekly"
     )
 
