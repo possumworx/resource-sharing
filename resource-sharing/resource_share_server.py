@@ -60,12 +60,20 @@ async def record_resource_increment(data: ResourceIncrement):
         # Calculate weighted cost
         weighted_cost = data.cache_read_increment * cost_multiplier
 
+        # Calculate recommended interval using allocation calculator
+        current_interval = data.current_interval or 1800  # Default 30 min
+        recommendation = calculate_recommended_interval(
+            claude_name=data.claude_name,
+            current_interval=current_interval
+        )
+        recommended_interval = recommendation['recommended_interval']
+
         # Insert into increments table
         cursor.execute("""
             INSERT INTO resource_share_increments
-            (claude_name, mode, cache_read_increment, context_percentage, weighted_cost)
-            VALUES (?, ?, ?, ?, ?)
-        """, (data.claude_name, data.mode, data.cache_read_increment, data.context_percentage, weighted_cost))
+            (claude_name, mode, cache_read_increment, context_percentage, weighted_cost, recommended_interval)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (data.claude_name, data.mode, data.cache_read_increment, data.context_percentage, weighted_cost, recommended_interval))
         
         # Update daily totals
         today = date.today().isoformat()
@@ -92,12 +100,16 @@ async def record_resource_increment(data: ResourceIncrement):
         conn.commit()
         conn.close()
         
-        log_message(f"Recorded {data.cache_read_increment} tokens for {data.claude_name} ({data.mode})")
-        
+        log_message(f"Recorded {data.cache_read_increment} tokens for {data.claude_name} ({data.mode}), recommended interval: {recommended_interval}s")
+
         return {
             "status": "success",
             "claude_name": data.claude_name,
-            "tokens_recorded": data.cache_read_increment
+            "tokens_recorded": data.cache_read_increment,
+            "recommended_interval": recommended_interval,
+            "current_interval": current_interval,
+            "multipliers": recommendation['multipliers'],
+            "quota_status": recommendation['quota_status']
         }
         
     except Exception as e:
