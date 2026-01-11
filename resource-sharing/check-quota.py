@@ -156,12 +156,13 @@ def get_usage_via_tmux():
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "/usage"], check=True)
     time.sleep(2)
     subprocess.run(["tmux", "send-keys", "-t", "autonomous-claude", "Enter"], check=True)
-    time.sleep(10)  # Wait for stats to fully render
+    time.sleep(12)  # Wait longer for stats to fully render (was 10s)
 
-    # Capture output
+    # Capture output - use larger range to ensure we get "Resets" lines
+    # Start from top of visible pane (-S 0) instead of relative offset
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
-        ["tmux", "capture-pane", "-t", "autonomous-claude", "-p", "-S", "+6"],
+        ["tmux", "capture-pane", "-t", "autonomous-claude", "-p", "-S", "0"],
         capture_output=True,
         text=True,
         check=True
@@ -224,6 +225,16 @@ def main():
         print("Raw output:")
         print(usage_text)
         return 1
+
+    # Validate that we got reset times
+    if 'session_5hour_reset' not in quota_data:
+        print("⚠️  WARNING: Missing session_5hour_reset time")
+    if 'week_reset' not in quota_data:
+        print("⚠️  WARNING: Missing week_reset time")
+
+    if 'session_5hour_reset' not in quota_data or 'week_reset' not in quota_data:
+        print("Raw output for debugging:")
+        print(usage_text)
 
     # Store in database
     store_quota(quota_data)
