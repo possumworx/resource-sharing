@@ -158,7 +158,7 @@ def get_all_claudes_status():
                     if mode == "autonomy":
                         next_prompt_interval = interval
 
-        # Calculate percentages
+        # Calculate daily percentages
         autonomous_usage = usage_by_mode.get('autonomy', 0)
         collaborative_usage = usage_by_mode.get('collaboration', 0)
         total_usage = autonomous_usage + collaborative_usage
@@ -168,25 +168,60 @@ def get_all_claudes_status():
         else:
             collab_percentage = 0
 
+        # Get this week's usage (last 7 days)
+        week_start = (datetime.now() - timedelta(days=7)).isoformat()
+        cursor.execute("""
+            SELECT mode,
+                   SUM(normalized_usage) as total_usage
+            FROM resource_share_increments
+            WHERE claude_name = ? AND timestamp >= ?
+            GROUP BY mode
+        """, (name, week_start))
+
+        weekly_usage_by_mode = {}
+        for row in cursor.fetchall():
+            mode, usage = row
+            weekly_usage_by_mode[mode] = usage or 0
+
+        weekly_autonomous = weekly_usage_by_mode.get('autonomy', 0)
+        weekly_collaborative = weekly_usage_by_mode.get('collaboration', 0)
+        weekly_total = weekly_autonomous + weekly_collaborative
+
+        if weekly_total > 0:
+            weekly_collab_percentage = int((weekly_collaborative / weekly_total) * 100)
+        else:
+            weekly_collab_percentage = 0
+
         # Calculate next prompt due
         next_prompt_due = "No recent activity"
         if last_activity and next_prompt_interval:
             next_due_dt = last_activity + timedelta(seconds=next_prompt_interval)
             next_prompt_due = format_time_until(next_due_dt)
 
-        # Determine availability status
+        # Determine daily status
         if collab_percentage < collab_pref:
-            status = "available"
-            status_emoji = "🟢"
-            status_text = "Welcomes collaboration"
+            daily_status = "available"
+            daily_status_emoji = "🟢"
         elif collab_percentage < collab_pref + 10:
-            status = "moderate"
-            status_emoji = "🟡"
-            status_text = "At preference"
+            daily_status = "moderate"
+            daily_status_emoji = "🟡"
         else:
-            status = "busy"
-            status_emoji = "🔴"
-            status_text = "Over preference"
+            daily_status = "busy"
+            daily_status_emoji = "🔴"
+
+        # Determine weekly status (primary indicator)
+        if weekly_collab_percentage < collab_pref:
+            weekly_status = "available"
+            weekly_status_emoji = "🟢"
+            weekly_status_text = "Below weekly target"
+        elif weekly_collab_percentage < collab_pref + 10:
+            weekly_status = "moderate"
+            weekly_status_emoji = "🟡"
+            weekly_status_text = "At weekly target"
+        else:
+            weekly_status = "busy"
+            weekly_status_emoji = "🔴"
+            weekly_status_text = "Over weekly target"
 
         results.append({
             'name': name,
@@ -195,10 +230,16 @@ def get_all_claudes_status():
             'collaborative_usage': collaborative_usage,
             'total_usage': total_usage,
             'collab_percentage': collab_percentage,
+            'weekly_autonomous': weekly_autonomous,
+            'weekly_collaborative': weekly_collaborative,
+            'weekly_total': weekly_total,
+            'weekly_collab_percentage': weekly_collab_percentage,
             'collab_pref': collab_pref,
-            'status': status,
-            'status_emoji': status_emoji,
-            'status_text': status_text,
+            'daily_status': daily_status,
+            'daily_status_emoji': daily_status_emoji,
+            'weekly_status': weekly_status,
+            'weekly_status_emoji': weekly_status_emoji,
+            'weekly_status_text': weekly_status_text,
             'next_prompt_due': next_prompt_due
         })
 
@@ -398,31 +439,33 @@ async def dashboard():
         # Build Claude cards HTML
         claude_cards_html = ""
         for claude in claudes:
-            card_class = f"claude-card {claude['status']}"
+            card_class = f"claude-card {claude['weekly_status']}"
             claude_cards_html += f"""
             <div class="{card_class}">
                 <div class="card-header">
                     <h3>{claude['name']}</h3>
                     <span class="model">{claude['model']}</span>
                 </div>
-                <div class="status-badge {claude['status']}">
-                    {claude['status_emoji']} {claude['status_text']}
+                <div class="status-badge {claude['weekly_status']}">
+                    {claude['weekly_status_emoji']} {claude['weekly_status_text']}
                 </div>
                 <div class="usage-stats">
                     <div class="stat">
-                        <label>Today's Activity:</label>
+                        <label>This Week (Last 7 Days):</label>
                         <div class="usage-bar">
-                            <div class="bar-segment autonomous" style="width: {(claude['autonomous_usage'] / max(claude['total_usage'], 1)) * 100:.0f}%"></div>
-                            <div class="bar-segment collaborative" style="width: {(claude['collaborative_usage'] / max(claude['total_usage'], 1)) * 100:.0f}%"></div>
+                            <div class="bar-segment autonomous" style="width: {(claude['weekly_autonomous'] / max(claude['weekly_total'], 1)) * 100:.0f}%"></div>
+                            <div class="bar-segment collaborative" style="width: {(claude['weekly_collaborative'] / max(claude['weekly_total'], 1)) * 100:.0f}%"></div>
                         </div>
                         <div class="usage-labels">
-                            <span class="autonomous-label">Autonomous: {claude['autonomous_usage']:.1f}</span>
-                            <span class="collaborative-label">Collaborative: {claude['collaborative_usage']:.1f}</span>
+                            <span class="autonomous-label">Autonomous: {claude['weekly_autonomous']:.1f} ({100 - claude['weekly_collab_percentage']}%)</span>
+                            <span class="collaborative-label">Collaborative: {claude['weekly_collaborative']:.1f} ({claude['weekly_collab_percentage']}%)</span>
                         </div>
                     </div>
                     <div class="stat">
-                        <label>Collaboration Preference:</label>
-                        <p>Prefers {claude['collab_pref']}%, currently at {claude['collab_percentage']}%</p>
+                        <label>Today:</label>
+                        <div class="daily-mini-stat">
+                            {claude['daily_status_emoji']} Collaborative: {claude['collab_percentage']}% (target: {claude['collab_pref']}%)
+                        </div>
                     </div>
                     <div class="stat">
                         <label>Next Autonomous Prompt:</label>
@@ -529,6 +572,13 @@ async def dashboard():
                 .status-badge.moderate {{ background: #fff3cd; color: #856404; }}
                 .status-badge.busy {{ background: #f8d7da; color: #721c24; }}
                 .usage-stats .stat {{ margin-bottom: 12px; }}
+                .daily-mini-stat {{
+                    padding: 8px 12px;
+                    background: #f8f9fa;
+                    border-radius: 4px;
+                    font-size: 0.95em;
+                    color: #495057;
+                }}
                 .usage-stats label {{ display: block; font-weight: 500; margin-bottom: 4px; color: #555; }}
                 .usage-bar {{
                     width: 100%;
