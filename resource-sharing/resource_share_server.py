@@ -113,6 +113,28 @@ def format_time_until(target_dt):
             hours = int(delta.total_seconds() / 3600)
             return f"in {hours}h"
 
+def calculate_time_elapsed_percentage(reset_iso, window_duration_seconds):
+    """Calculate percentage of time window that has elapsed"""
+    if not reset_iso:
+        return 0
+
+    try:
+        reset_dt = datetime.fromisoformat(reset_iso)
+        now = datetime.now()
+
+        # If reset is in the future, calculate time elapsed since window started
+        # Window started at: reset_time - window_duration
+        window_start = reset_dt - timedelta(seconds=window_duration_seconds)
+        time_elapsed = (now - window_start).total_seconds()
+
+        # Calculate percentage
+        percentage = (time_elapsed / window_duration_seconds) * 100
+
+        # Clamp between 0 and 100
+        return max(0, min(100, int(percentage)))
+    except:
+        return 0
+
 def get_all_claudes_status():
     """Get status for all active Claudes"""
     conn = get_db()
@@ -484,27 +506,74 @@ async def dashboard():
             session_reset = format_reset_time(quota['session_5hour_reset'])
             week_reset = format_reset_time(quota['week_reset'])
 
+            # Calculate time elapsed percentages
+            session_time_pct = calculate_time_elapsed_percentage(
+                quota['session_5hour_reset'], 5 * 3600  # 5 hours in seconds
+            )
+            week_time_pct = calculate_time_elapsed_percentage(
+                quota['week_reset'], 7 * 24 * 3600  # 7 days in seconds
+            )
+
             quota_html = f"""
             <div class="quota-item">
                 <h4>Session (5-hour)</h4>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {session_pct}%"></div>
+                <div class="dual-progress">
+                    <div class="progress-row">
+                        <span class="progress-label">Quota:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill quota" style="width: {session_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{session_pct}%</span>
+                    </div>
+                    <div class="progress-row">
+                        <span class="progress-label">Time:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill time" style="width: {session_time_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{session_time_pct}%</span>
+                    </div>
                 </div>
-                <p>{session_pct}% used • Resets {session_reset}</p>
+                <p class="quota-reset">Resets {session_reset}</p>
             </div>
             <div class="quota-item">
                 <h4>Week (all models)</h4>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {week_all_pct}%"></div>
+                <div class="dual-progress">
+                    <div class="progress-row">
+                        <span class="progress-label">Quota:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill quota" style="width: {week_all_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{week_all_pct}%</span>
+                    </div>
+                    <div class="progress-row">
+                        <span class="progress-label">Time:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill time" style="width: {week_time_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{week_time_pct}%</span>
+                    </div>
                 </div>
-                <p>{week_all_pct}% used • Resets {week_reset}</p>
+                <p class="quota-reset">Resets {week_reset}</p>
             </div>
             <div class="quota-item">
                 <h4>Week (Sonnet only)</h4>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {week_sonnet_pct}%"></div>
+                <div class="dual-progress">
+                    <div class="progress-row">
+                        <span class="progress-label">Quota:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill quota" style="width: {week_sonnet_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{week_sonnet_pct}%</span>
+                    </div>
+                    <div class="progress-row">
+                        <span class="progress-label">Time:</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill time" style="width: {week_time_pct}%"></div>
+                        </div>
+                        <span class="progress-value">{week_time_pct}%</span>
+                    </div>
                 </div>
-                <p>{week_sonnet_pct}% used • Resets {week_reset}</p>
+                <p class="quota-reset">Resets {week_reset}</p>
             </div>
             """
         else:
@@ -531,20 +600,45 @@ async def dashboard():
                 .subtitle {{ color: #7f8c8d; margin-bottom: 30px; }}
                 .section {{ background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
                 .section h2 {{ margin-bottom: 15px; color: #34495e; font-size: 1.3em; }}
-                .quota-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }}
-                .quota-item h4 {{ margin-bottom: 8px; color: #555; }}
+                .quota-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }}
+                .quota-item h4 {{ margin-bottom: 12px; color: #555; }}
+                .quota-reset {{ margin-top: 8px; font-size: 0.9em; color: #7f8c8d; }}
+                .dual-progress {{ margin: 10px 0; }}
+                .progress-row {{
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 8px;
+                }}
+                .progress-label {{
+                    min-width: 50px;
+                    font-size: 0.85em;
+                    color: #666;
+                    font-weight: 500;
+                }}
                 .progress-bar {{
-                    width: 100%;
-                    height: 20px;
+                    flex: 1;
+                    height: 18px;
                     background: #ecf0f1;
-                    border-radius: 10px;
+                    border-radius: 9px;
                     overflow: hidden;
-                    margin: 8px 0;
+                }}
+                .progress-value {{
+                    min-width: 35px;
+                    text-align: right;
+                    font-size: 0.85em;
+                    color: #555;
+                    font-weight: 500;
                 }}
                 .progress-fill {{
                     height: 100%;
-                    background: linear-gradient(90deg, #3498db, #2980b9);
                     transition: width 0.3s ease;
+                }}
+                .progress-fill.quota {{
+                    background: linear-gradient(90deg, #3498db, #2980b9);
+                }}
+                .progress-fill.time {{
+                    background: linear-gradient(90deg, #95a5a6, #7f8c8d);
                 }}
                 .claude-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }}
                 .claude-card {{
