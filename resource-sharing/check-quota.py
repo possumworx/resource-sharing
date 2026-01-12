@@ -66,11 +66,11 @@ def parse_reset_time(reset_line: str):
     now = datetime.now()
 
     # Handle "10:59pm" format (today)
-    time_only = re.match(r'^(\d{1,2}):(\d{2})(am|pm)$', time_str, re.IGNORECASE)
+    time_only = re.match(r'^(\d{1,2})(?::(\d{2}))?(am|pm)$', time_str, re.IGNORECASE)
     if time_only:
         hour, minute, ampm = time_only.groups()
         hour = int(hour)
-        minute = int(minute)
+        minute = int(minute) if minute else 0
         if ampm.lower() == 'pm' and hour != 12:
             hour += 12
         elif ampm.lower() == 'am' and hour == 12:
@@ -78,7 +78,7 @@ def parse_reset_time(reset_line: str):
         return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     # Handle "Jan 8, 7:59am" format
-    date_time = re.match(r'^(\w+)\s+(\d{1,2}),?\s+(\d{1,2}):(\d{2})(am|pm)$', time_str, re.IGNORECASE)
+    date_time = re.match(r'^(\w+)\s+(\d{1,2}),?\s+(\d{1,2})(?::(\d{2}))?(am|pm)$', time_str, re.IGNORECASE)
     if date_time:
         month_str, day, hour, minute, ampm = date_time.groups()
         month_map = {'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
@@ -86,7 +86,7 @@ def parse_reset_time(reset_line: str):
         month = month_map.get(month_str.lower()[:3], 1)
         day = int(day)
         hour = int(hour)
-        minute = int(minute)
+        minute = int(minute) if minute else 0
         if ampm.lower() == 'pm' and hour != 12:
             hour += 12
         elif ampm.lower() == 'am' and hour == 12:
