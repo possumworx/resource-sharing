@@ -15,6 +15,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 DB_PATH = SCRIPT_DIR / "data" / "resource_tracking.db"
 OUTPUT_PATH = SCRIPT_DIR.parent / "data" / "usage_output.txt"
+CAPTURES_DIR = SCRIPT_DIR / "data" / "captures"
 
 def setup_database():
     """Create quota_info table if it doesn't exist."""
@@ -32,6 +33,23 @@ def setup_database():
 
     conn.commit()
     conn.close()
+
+def save_capture(text: str, parse_success: bool):
+    """Save captured output with timestamp for debugging.
+    
+    Files are named: YYYYMMDD_HHMMSS_ok.txt or YYYYMMDD_HHMMSS_fail.txt
+    """
+    CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    status = "ok" if parse_success else "fail"
+    filename = f"{timestamp}_{status}.txt"
+    
+    capture_path = CAPTURES_DIR / filename
+    with open(capture_path, 'w') as f:
+        f.write(text)
+    
+    print(f"Saved capture to: {capture_path}")
 
 def parse_reset_time(reset_line: str):
     """Parse reset time string into datetime.
@@ -219,6 +237,15 @@ def main():
 
     # Parse the output
     quota_data = parse_usage_text(usage_text)
+
+    # Determine if parsing was successful (got all reset times)
+    parse_success = (
+        'session_5hour_reset' in quota_data and 
+        'week_reset' in quota_data
+    )
+    
+    # Save capture for debugging
+    save_capture(usage_text, parse_success)
 
     if not quota_data:
         print("ERROR: Failed to parse quota data")
