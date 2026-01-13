@@ -19,7 +19,8 @@ DB_PATH = Path(__file__).parent / "data" / "resource_tracking.db"
 # Interval bounds (in seconds)
 MIN_INTERVAL = 900   # 15 minutes
 MAX_INTERVAL = 7200  # 2 hours
-DEFAULT_INTERVAL = 1800  # 30 minutes
+DEFAULT_INTERVAL = 999999  # lots of hours
+AUTONOMY_PERCENTAGE = 50 # Autonomous operation will take 50% of our token pool
 
 def get_latest_quota() -> Optional[Dict]:
     """Get the most recent quota information including reset times."""
@@ -189,11 +190,14 @@ def calculate_window_multiplier(
         return (1.0, f"{window_name}: Just started")
 
     usage_fraction = percent_used / 100.0
-    pace_ratio = usage_fraction / time_fraction
+    multiplier = (usage_fraction / time_fraction)
+    reason = ("because I said so")
 
     # pace_ratio > 1.0: using too fast, slow down (multiplier > 1.0)
     # pace_ratio < 1.0: using too slow, speed up (multiplier < 1.0)
     # pace_ratio = 1.0: perfect pace
+
+    return (multiplier, reason)
 
     if pace_ratio > 1.5:
         multiplier = 1.5
@@ -211,7 +215,7 @@ def calculate_window_multiplier(
         multiplier = 1.0
         reason = f"{window_name}: {percent_used}% used, {int(time_fraction*100)}% elapsed - on track"
 
-    return (multiplier, reason)
+
 
 def calculate_recommended_interval(
     claude_name: str,
@@ -261,6 +265,7 @@ def calculate_recommended_interval(
         reset_time_iso=quota['session_5hour_reset'],
         window_name="5hr session"
     )
+    session_mult = min(session_mult,1.0)  #5 hour mult should not speed claudes up
 
     # 3. Weekly Window Multiplier
     week_mult, week_reason = calculate_window_multiplier(
