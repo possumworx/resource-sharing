@@ -11,7 +11,8 @@ from datetime import datetime, date, timedelta
 import sqlite3
 from pathlib import Path
 import uvicorn
-from allocation_calculator import calculate_recommended_interval
+# EMERGENCY FIX 2026-01-15: Disabled allocation calculator - using constant interval
+# from allocation_calculator import calculate_recommended_interval
 
 # Configuration
 DB_PATH = Path("/home/clap-admin/cooperation-platform/resource-sharing/data/resource_tracking.db")
@@ -312,13 +313,19 @@ async def record_resource_increment(data: ResourceIncrement):
             cost_delta = weighted_cost / 1000.0  # rough estimate
             normalized_usage = cache_read_increment * 1.0
 
-        # Calculate recommended interval using allocation calculator
+        # EMERGENCY FIX 2026-01-15: Use constant 1-hour interval for all Claudes
+        # This disables the allocation calculator while we fix the algorithm
         current_interval = data.current_interval or 1800  # Default 30 min
-        recommendation = calculate_recommended_interval(
-            claude_name=data.claude_name,
-            current_interval=current_interval
-        )
-        recommended_interval = recommendation['recommended_interval']
+
+        # Constant interval for emergency mode
+        recommended_interval = 1800  # 30 minutes - Orange working on orange-home setup autonomously
+
+        # Simple recommendation structure for response
+        recommendation = {
+            'recommended_interval': recommended_interval,
+            'multipliers': {'emergency_mode': 1.0},
+            'quota_status': 'emergency_constant_interval'
+        }
 
         # Insert into increments table (with both old and new columns)
         cursor.execute("""
