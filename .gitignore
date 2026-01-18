@@ -8,6 +8,7 @@ venv/
 env/
 
 # Data and logs
+data/*
 data/*.db
 data/*.db-*
 logs/
